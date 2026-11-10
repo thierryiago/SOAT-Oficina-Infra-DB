@@ -1,0 +1,14 @@
+# Copie para terraform.tfvars (não versionado) e mantenha apenas um dos cenários.
+
+# --- Cenário 1: LocalStack (desenvolvimento e homologação da infraestrutura) ---
+cloud_provider      = "localstack"
+localstack_endpoint = "http://localhost:4566"
+aws_region          = "us-east-1"
+project             = "oficina"
+environment         = "local"
+
+# --- Cenário 2: AWS Academy (Learner Lab) ---
+# cloud_provider = "aws"
+# aws_region     = "us-east-1"
+# project        = "oficina"
+# environment    = "aws"

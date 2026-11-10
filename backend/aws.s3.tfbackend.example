@@ -1,0 +1,7 @@
+# Copie para backend/aws.s3.tfbackend (não versionado) e informe o bucket criado pelo bootstrap
+# do repositório SOAT-Oficina-Infra-K8s na AWS Academy. As credenciais vêm das variáveis de ambiente
+# AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY e AWS_SESSION_TOKEN do Learner Lab.
+bucket       = "oficina-tfstate-<sufixo-da-conta>"
+key          = "infra-db/terraform.tfstate"
+region       = "us-east-1"
+use_lockfile = true
