@@ -12,3 +12,4 @@ environment         = "local"
 # aws_region     = "us-east-1"
 # project        = "oficina"
 # environment    = "aws"
+# network_state_bucket = "oficina-tfstate-<sufixo-da-conta>"   # o mesmo bucket de backend/aws.s3.tfbackend

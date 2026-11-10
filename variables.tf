@@ -50,3 +50,15 @@ variable "db_instance_class" {
   type        = string
   default     = "db.t3.micro"
 }
+
+variable "network_state_bucket" {
+  description = "Bucket do state remoto do repositório SOAT-Oficina-Infra-K8s (o mesmo deste backend)"
+  type        = string
+  default     = "oficina-tfstate-local"
+}
+
+variable "network_state_key" {
+  description = "Key do state do repositório SOAT-Oficina-Infra-K8s"
+  type        = string
+  default     = "infra-k8s/terraform.tfstate"
+}
