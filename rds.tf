@@ -17,6 +17,22 @@ resource "aws_security_group" "db" {
   description = "Security group do banco, acessivel apenas pelo cluster e pelos clientes autorizados"
   vpc_id      = local.vpc_id
 
+  ingress {
+    description     = "PostgreSQL a partir do security group do cluster"
+    from_port       = 5432
+    to_port         = 5432
+    protocol        = "tcp"
+    security_groups = [local.cluster_security_group_id]
+  }
+
+  ingress {
+    description     = "PostgreSQL a partir dos clientes autorizados"
+    from_port       = 5432
+    to_port         = 5432
+    protocol        = "tcp"
+    security_groups = [aws_security_group.db_clients.id]
+  }
+
   tags = {
     Name = "${local.name}-db"
   }
@@ -24,41 +40,23 @@ resource "aws_security_group" "db" {
 
 # Anexado pelos consumidores fora do cluster (a Lambda de autenticação) para alcançar o banco.
 # Fica neste repositório para a Lambda depender só do state do banco, sem dependência circular.
+# O egress vai para o CIDR da VPC, e não para o SG do banco, para os dois SGs não se referenciarem.
 resource "aws_security_group" "db_clients" {
   name        = "${local.name}-db-clients"
   description = "Clientes autorizados a acessar o banco (ex.: Lambda de autenticacao)"
   vpc_id      = local.vpc_id
 
+  egress {
+    description = "PostgreSQL dentro da VPC"
+    from_port   = 5432
+    to_port     = 5432
+    protocol    = "tcp"
+    cidr_blocks = [data.aws_vpc.network.cidr_block]
+  }
+
   tags = {
     Name = "${local.name}-db-clients"
   }
-}
-
-resource "aws_vpc_security_group_ingress_rule" "db_from_cluster" {
-  security_group_id            = aws_security_group.db.id
-  description                  = "PostgreSQL a partir do security group do cluster"
-  ip_protocol                  = "tcp"
-  from_port                    = 5432
-  to_port                      = 5432
-  referenced_security_group_id = local.cluster_security_group_id
-}
-
-resource "aws_vpc_security_group_ingress_rule" "db_from_clients" {
-  security_group_id            = aws_security_group.db.id
-  description                  = "PostgreSQL a partir dos clientes autorizados"
-  ip_protocol                  = "tcp"
-  from_port                    = 5432
-  to_port                      = 5432
-  referenced_security_group_id = aws_security_group.db_clients.id
-}
-
-resource "aws_vpc_security_group_egress_rule" "clients_to_db" {
-  security_group_id            = aws_security_group.db_clients.id
-  description                  = "PostgreSQL ate o banco"
-  ip_protocol                  = "tcp"
-  from_port                    = 5432
-  to_port                      = 5432
-  referenced_security_group_id = aws_security_group.db.id
 }
 
 resource "aws_db_instance" "main" {

@@ -20,6 +20,10 @@ data "terraform_remote_state" "network" {
   }
 }
 
+data "aws_vpc" "network" {
+  id = local.vpc_id
+}
+
 locals {
   name = "${var.project}-${var.environment}"
 
