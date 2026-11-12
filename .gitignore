@@ -1,0 +1,11 @@
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+crash.log
+
+# Valores locais e backend real da AWS (bucket com sufixo da conta): nunca versionados
+terraform.tfvars
+*.auto.tfvars
+backend/aws.s3.tfbackend
