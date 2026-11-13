@@ -30,8 +30,18 @@ output "db_password" {
 
 output "db_connection_string" {
   description = "Connection string no formato Npgsql"
-  value       = "Host=${aws_db_instance.main.address};Port=${aws_db_instance.main.port};Database=${aws_db_instance.main.db_name};Username=${aws_db_instance.main.username};Password=${random_password.db.result}"
+  value       = local.db_connection_string
   sensitive   = true
+}
+
+output "db_connection_string_parameter_name" {
+  description = "Nome do parâmetro SecureString do SSM com a connection string (lido pela Lambda e pelo CD)"
+  value       = aws_ssm_parameter.db_connection_string.name
+}
+
+output "db_connection_string_parameter_arn" {
+  description = "ARN do parâmetro SecureString do SSM com a connection string (permissão de leitura da Lambda)"
+  value       = aws_ssm_parameter.db_connection_string.arn
 }
 
 output "db_security_group_id" {
