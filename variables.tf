@@ -62,3 +62,14 @@ variable "network_state_key" {
   type        = string
   default     = "infra-k8s/terraform.tfstate"
 }
+
+variable "ssm_parameter_prefix" {
+  description = "Prefixo dos parâmetros do SSM Parameter Store com as credenciais do banco"
+  type        = string
+  default     = "/oficina/db"
+
+  validation {
+    condition     = can(regex("^/[A-Za-z0-9_./-]*[^/]$", var.ssm_parameter_prefix))
+    error_message = "ssm_parameter_prefix deve começar com \"/\", não terminar com \"/\" e usar apenas letras, números, \"_\", \".\", \"-\" e \"/\"."
+  }
+}
