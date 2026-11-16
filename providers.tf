@@ -23,6 +23,7 @@ provider "aws" {
       ec2 = endpoints.value
       rds = endpoints.value
       s3  = endpoints.value
+      ssm = endpoints.value
       sts = endpoints.value
     }
   }
