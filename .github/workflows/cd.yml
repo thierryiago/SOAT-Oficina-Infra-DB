@@ -1,0 +1,107 @@
+# CD do banco. Push na main (ou execução manual) aplica no destino da variável de repositório CLOUD_PROVIDER
+# (padrão aws), com override pelo input do workflow_dispatch:
+# - aws: AWS Academy, no environment prod (aprovação manual, credenciais do Learner Lab);
+# - localstack: apply efêmero no LocalStack do runner, fallback quando as credenciais do lab expiraram.
+name: CD
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '**.tf'
+      - '.terraform.lock.hcl'
+      - 'backend/**'
+      - '.github/workflows/cd.yml'
+      - '.github/workflows/localstack-ephemeral.yml'
+      - '.github/actions/**'
+  workflow_dispatch:
+    inputs:
+      cloud_provider:
+        description: 'Destino. "variavel" usa a variável de repositório CLOUD_PROVIDER (padrão aws).'
+        type: choice
+        options: [variavel, aws, localstack]
+        default: variavel
+
+permissions:
+  contents: read
+
+jobs:
+  target:
+    name: target
+    runs-on: ubuntu-latest
+    outputs:
+      provider: ${{ steps.resolve.outputs.provider }}
+    steps:
+      - name: Resolver o destino
+        id: resolve
+        env:
+          INPUT: ${{ inputs.cloud_provider }}
+          REPO_VAR: ${{ vars.CLOUD_PROVIDER }}
+        run: |
+          [ "$INPUT" = "variavel" ] && INPUT=""
+          provider="${INPUT:-${REPO_VAR:-aws}}"
+          case "$provider" in
+            aws|localstack) ;;
+            *) echo "::error::CLOUD_PROVIDER inválido: $provider (use aws ou localstack)."; exit 1 ;;
+          esac
+          echo "provider=$provider" >> "$GITHUB_OUTPUT"
+          echo "Destino do deploy: **$provider**" >> "$GITHUB_STEP_SUMMARY"
+
+  localstack:
+    name: localstack
+    needs: target
+    if: needs.target.outputs.provider == 'localstack'
+    uses: ./.github/workflows/localstack-ephemeral.yml
+    with:
+      destroy: false
+    secrets:
+      LOCALSTACK_AUTH_TOKEN: ${{ secrets.LOCALSTACK_AUTH_TOKEN }}
+
+  aws:
+    name: aws
+    needs: target
+    if: needs.target.outputs.provider == 'aws'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: prod
+    # Um apply por vez sobre o state da AWS (vale também para o destroy).
+    concurrency:
+      group: infra-db-aws-state
+      cancel-in-progress: false
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
+      AWS_DEFAULT_REGION: us-east-1
+      TF_IN_AUTOMATION: 'true'
+      TF_INPUT: 'false'
+      TF_VAR_cloud_provider: aws
+      TF_VAR_environment: prod
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: '1.16.4'
+          terraform_wrapper: false
+
+      - name: AWS Academy init
+        uses: ./.github/actions/aws-academy-init
+
+      - name: Terraform plan
+        run: terraform plan -out=tfplan -no-color
+
+      - name: Terraform apply
+        run: terraform apply tfplan
+
+      - name: Resumo
+        run: |
+          set -euo pipefail
+          {
+            echo "### Banco aplicado na AWS Academy"
+            echo "- Parâmetro do SSM: \`$(terraform output -raw db_connection_string_parameter_name)\`"
+            echo "- SG do banco: \`$(terraform output -raw db_security_group_id)\`"
+            echo "- SG dos clientes: \`$(terraform output -raw db_client_security_group_id)\`"
+          } >> "$GITHUB_STEP_SUMMARY"

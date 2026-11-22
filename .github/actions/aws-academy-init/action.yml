@@ -1,0 +1,48 @@
+# Preparação comum ao CD e ao destroy na AWS Academy: confere as credenciais do Learner Lab, acha o bucket
+# do state (oficina-tfstate-<account_id>, criado pelo bootstrap do SOAT-Oficina-Infra-K8s, INFRA-8), confere
+# o state da rede, gera backend/aws.s3.tfbackend e roda o terraform init.
+# Espera AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY e AWS_SESSION_TOKEN no env do job (secrets do environment prod).
+name: AWS Academy init
+description: Confere as credenciais do Learner Lab, prepara o backend e roda o terraform init.
+
+runs:
+  using: composite
+  steps:
+    - name: Conferir as credenciais do Learner Lab
+      shell: bash
+      run: |
+        set -euo pipefail
+        for v in AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN; do
+          if [ -z "${!v:-}" ]; then
+            echo "::error::Secret $v ausente no environment prod. Rode o set-lab-credentials.ps1."
+            exit 1
+          fi
+        done
+        if ! account=$(aws sts get-caller-identity --query Account --output text 2>/dev/null); then
+          echo "::error::Credenciais do Learner Lab inválidas ou expiradas (duram ~4h). Inicie o lab, copie as credenciais em AWS Details e rode o set-lab-credentials.ps1."
+          exit 1
+        fi
+        echo "::add-mask::$account"
+        echo "TF_STATE_BUCKET=oficina-tfstate-$account" >> "$GITHUB_ENV"
+        echo "Credenciais válidas."
+
+    - name: Conferir o bucket e o state da rede
+      shell: bash
+      run: |
+        set -euo pipefail
+        if ! aws s3api head-bucket --bucket "$TF_STATE_BUCKET" 2>/dev/null; then
+          echo "::error::Bucket do state não encontrado. Aplique o bootstrap do SOAT-Oficina-Infra-K8s na AWS (INFRA-8)."
+          exit 1
+        fi
+        if ! aws s3api head-object --bucket "$TF_STATE_BUCKET" --key infra-k8s/terraform.tfstate >/dev/null 2>&1; then
+          echo "::error::State da rede (infra-k8s/terraform.tfstate) não encontrado. Aplique o SOAT-Oficina-Infra-K8s antes do banco."
+          exit 1
+        fi
+
+    - name: Backend e terraform init
+      shell: bash
+      run: |
+        set -euo pipefail
+        sed "s/^bucket *=.*/bucket       = \"$TF_STATE_BUCKET\"/" backend/aws.s3.tfbackend.example > backend/aws.s3.tfbackend
+        echo "TF_VAR_network_state_bucket=$TF_STATE_BUCKET" >> "$GITHUB_ENV"
+        terraform init -input=false -backend-config=backend/aws.s3.tfbackend
