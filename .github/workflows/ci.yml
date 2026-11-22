@@ -1,0 +1,79 @@
+# CI dos PRs para a develop e a main: formatação, validação, tflint e apply efêmero no LocalStack do runner,
+# com o plan comentado no PR. PRs nunca tocam a AWS Academy.
+name: CI
+
+on:
+  pull_request:
+    branches: [develop, main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: '1.16.4'
+          terraform_wrapper: false
+
+      - name: terraform fmt
+        run: terraform fmt -check -recursive -diff
+
+      - name: terraform validate (banco)
+        run: |
+          set -euo pipefail
+          terraform init -backend=false -input=false
+          terraform validate
+
+      - name: terraform validate (fixture de rede)
+        run: |
+          set -euo pipefail
+          terraform -chdir=tests/network-fixture init -backend=false -input=false
+          terraform -chdir=tests/network-fixture validate
+
+  tflint:
+    name: tflint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup TFLint
+        uses: terraform-linters/setup-tflint@v6
+        with:
+          tflint_version: v0.65.0
+
+      - name: tflint --init
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: tflint --init
+
+      - name: tflint
+        run: tflint --recursive --config "$GITHUB_WORKSPACE/.tflint.hcl" --format compact
+
+  localstack:
+    name: localstack
+    needs: [validate, tflint]
+    permissions:
+      contents: read
+      pull-requests: write
+    uses: ./.github/workflows/localstack-ephemeral.yml
+    with:
+      destroy: true
+      comment_plan: true
+    secrets:
+      LOCALSTACK_AUTH_TOKEN: ${{ secrets.LOCALSTACK_AUTH_TOKEN }}

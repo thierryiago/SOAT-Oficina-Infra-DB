@@ -1,0 +1,58 @@
+# Destroy manual do banco na AWS Academy, no environment prod (aprovação manual).
+# Rode antes do destroy da rede: o terraform_remote_state da rede precisa existir para o plan do destroy.
+name: Destroy
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Digite "destroy-prod" para confirmar.'
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  aws:
+    name: aws
+    if: inputs.confirm == 'destroy-prod'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: prod
+    concurrency:
+      group: infra-db-aws-state
+      cancel-in-progress: false
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
+      AWS_DEFAULT_REGION: us-east-1
+      TF_IN_AUTOMATION: 'true'
+      TF_INPUT: 'false'
+      TF_VAR_cloud_provider: aws
+      TF_VAR_environment: prod
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: '1.16.4'
+          terraform_wrapper: false
+
+      - name: AWS Academy init
+        uses: ./.github/actions/aws-academy-init
+
+      - name: Terraform destroy
+        run: terraform destroy -auto-approve -no-color
+
+  rejected:
+    name: confirmação
+    if: inputs.confirm != 'destroy-prod'
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          echo "::error::Confirmação incorreta. Digite exatamente destroy-prod."
+          exit 1
